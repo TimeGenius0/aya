@@ -5,6 +5,10 @@ clients, animaux, notes de traitement, calendrier de consultations et
 facturation. Accessible sur mobile et web, installable comme une application
 (PWA), et exposée en MCP pour un assistant IA.
 
+**Pas encore en ligne ?** Suivre [`SETUP.md`](./SETUP.md) — la checklist
+complète de création des comptes (GitHub, Supabase, Resend, Vercel), avec le
+schéma SQL à exécuter.
+
 ## Stack
 
 - **Next.js** (App Router pour les pages, Pages Router pour `/api/mcp` —

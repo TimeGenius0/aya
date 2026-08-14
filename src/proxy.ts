@@ -2,7 +2,11 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 // Routes reachable without a session. Everything else redirects to /login.
-const PUBLIC_PATHS = ["/login", "/auth/callback"];
+// "/" is included because Supabase can land recovery/magic-link tokens there
+// as a URL fragment (server/middleware never sees fragments) — the root
+// page itself checks for and consumes those tokens client-side before
+// deciding where to send the visitor next.
+const PUBLIC_PATHS = ["/login", "/auth/callback", "/"];
 
 // The MCP endpoint has its own bearer-token auth (see src/lib/mcp/apiKeyAuth.ts)
 // and must never be redirected to /login — MCP clients don't have cookies.
