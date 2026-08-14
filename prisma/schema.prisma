@@ -28,6 +28,7 @@ model Staff {
   notesAuthored        Note[]         @relation("NoteAuthor")
   invoicesCreated      Invoice[]      @relation("InvoiceCreatedBy")
   apiKeys              ApiKey[]
+  oauthAuthorizationCodes OAuthAuthorizationCode[]
 
   @@map("staff")
 }
@@ -204,4 +205,41 @@ model ApiKey {
   staff Staff? @relation(fields: [staffId], references: [id])
 
   @@map("api_keys")
+}
+
+/// OAuth clients registered via Dynamic Client Registration (RFC 7591) —
+/// this is how claude.ai's "Add custom connector" gets a client_id without
+/// anyone typing one in: it self-registers on first connect. Public clients
+/// only (PKCE, no client secret) — see src/lib/oauth.
+model OAuthClient {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clientId       String   @unique @map("client_id")
+  clientName     String?  @map("client_name")
+  redirectUris   String[] @map("redirect_uris")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  authorizationCodes OAuthAuthorizationCode[]
+
+  @@map("oauth_clients")
+}
+
+/// Single-use authorization codes issued from the /oauth/authorize consent
+/// screen, exchanged at /oauth/token for an access token (minted into
+/// api_keys, reusing the same verification path as manually-created keys).
+model OAuthAuthorizationCode {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codeHash            String    @unique @map("code_hash")
+  clientId            String    @map("client_id")
+  redirectUri         String    @map("redirect_uri")
+  codeChallenge       String    @map("code_challenge")
+  codeChallengeMethod String    @default("S256") @map("code_challenge_method")
+  staffId             String    @map("staff_id") @db.Uuid
+  expiresAt           DateTime  @map("expires_at")
+  usedAt              DateTime? @map("used_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+
+  client OAuthClient @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  staff  Staff       @relation(fields: [staffId], references: [id])
+
+  @@map("oauth_authorization_codes")
 }

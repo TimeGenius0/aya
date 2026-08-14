@@ -12,6 +12,16 @@ import { registerTools } from "@/lib/mcp/tools";
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const auth = await verifyApiKey(req.headers.authorization);
   if (!auth) {
+    // Points an OAuth-aware client (claude.ai's custom connector) at the
+    // discovery metadata for src/app/oauth/* instead of just failing —
+    // per RFC 9728's convention for a protected resource's 401 challenge.
+    const protoHeader = req.headers["x-forwarded-proto"];
+    const proto = Array.isArray(protoHeader) ? protoHeader[0] : protoHeader ?? "https";
+    const origin = `${proto}://${req.headers.host}`;
+    res.setHeader(
+      "WWW-Authenticate",
+      `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource"`
+    );
     res.status(401).json({
       jsonrpc: "2.0",
       error: { code: -32001, message: "Clé API manquante, invalide ou révoquée." },

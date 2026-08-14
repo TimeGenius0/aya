@@ -1,16 +1,12 @@
-import { randomBytes, createHash } from "node:crypto";
+import { sha256Hex, randomToken } from "@/lib/crypto";
 import { createServiceClient } from "@/lib/supabase/service";
 
 const KEY_PREFIX = "ayh_";
 
-function hashKey(rawKey: string) {
-  return createHash("sha256").update(rawKey).digest("hex");
-}
-
 /** Generates a new raw API key + its hash. Only the raw value is ever shown, once. */
 export function generateApiKey() {
-  const raw = `${KEY_PREFIX}${randomBytes(24).toString("hex")}`;
-  return { raw, hash: hashKey(raw) };
+  const raw = randomToken(KEY_PREFIX);
+  return { raw, hash: sha256Hex(raw) };
 }
 
 export async function createApiKey(label: string, staffId: string) {
@@ -45,13 +41,15 @@ export async function revokeApiKey(id: string) {
  * Verifies a bearer token from the MCP endpoint's Authorization header.
  * Returns the staff id the key was issued to (or null if the key predates
  * that association), or null if the token is missing/invalid/revoked.
+ * Covers both manually-created keys and OAuth-issued tokens (src/lib/oauth)
+ * — both live in the same api_keys table.
  */
 export async function verifyApiKey(authorizationHeader: string | undefined) {
   if (!authorizationHeader?.startsWith("Bearer ")) return null;
   const raw = authorizationHeader.slice("Bearer ".length).trim();
   if (!raw) return null;
 
-  const hash = hashKey(raw);
+  const hash = sha256Hex(raw);
   const supabase = createServiceClient();
   const { data, error } = await supabase
     .from("api_keys")

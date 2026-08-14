@@ -12,6 +12,7 @@ Dans l'ordre :
 - **[C. Vercel](#c-vercel)** — mettre le site en ligne
 - **[D. Rebouclage](#d-rebouclage)** — connecter Supabase à l'adresse finale
 - **[E. Vérification](#e-verification)** — tester avant de fermer l'onglet
+- **[F. Connecteur MCP (OAuth)](#f-connecteur-mcp-oauth--pour-claudeai)** — pour claude.ai, si besoin
 
 ---
 
@@ -370,6 +371,66 @@ Dans l'ordre :
 
 ---
 
+## F. Connecteur MCP (OAuth) — pour claude.ai
+
+*Migration additionnelle · ~5 min · seulement si les phases A-E ont déjà été
+faites une première fois*
+
+L'app expose `/api/mcp`, utilisable de deux façons : une **clé API simple**
+(Réglages → Clés MCP, pour la plupart des clients MCP), ou **OAuth** pour les
+clients qui l'exigent — c'est le cas de claude.ai (« Add custom connector »,
+qui ne propose que « None » ou « OAuth », pas de champ pour une clé). Avec
+OAuth, claude.ai s'enregistre lui-même automatiquement (Dynamic Client
+Registration) : **il n'y a jamais de Client ID ou de Client Secret à saisir
+à la main.**
+
+1. **Exécuter la migration** — Dans **SQL Editor**, exécutez ce script
+   (additionnel au schéma de la phase B) :
+
+   ```sql
+   create table public.oauth_clients (
+     id uuid primary key default gen_random_uuid(),
+     client_id text not null unique,
+     client_name text,
+     redirect_uris text[] not null,
+     created_at timestamptz not null default now()
+   );
+
+   create table public.oauth_authorization_codes (
+     id uuid primary key default gen_random_uuid(),
+     code_hash text not null unique,
+     client_id text not null references public.oauth_clients(client_id) on delete cascade,
+     redirect_uri text not null,
+     code_challenge text not null,
+     code_challenge_method text not null default 'S256',
+     staff_id uuid not null references public.staff(id),
+     expires_at timestamptz not null,
+     used_at timestamptz,
+     created_at timestamptz not null default now()
+   );
+
+   alter table public.oauth_clients enable row level security;
+   alter table public.oauth_authorization_codes enable row level security;
+   -- no policies on either — server-side (Prisma) access only, same posture as api_keys
+   ```
+
+2. **Ajouter le connecteur dans claude.ai** — Settings → Connectors → Add
+   custom connector.
+   - URL : `https://aya-nine-wheat.vercel.app/api/mcp`
+   - Méthode d'authentification : **OAuth**
+   - Laissez **Client ID** et **Client Secret** vides — claude.ai les
+     obtient tout seul en s'enregistrant sur `/oauth/register` au premier
+     appel.
+3. **Se connecter et autoriser** — claude.ai ouvre un onglet vers
+   `/oauth/authorize` ; connectez-vous (mot de passe ou lien magique) si ce
+   n'est pas déjà fait, puis cliquez **Autoriser** sur l'écran de
+   confirmation. claude.ai récupère ensuite un jeton automatiquement — ce
+   jeton apparaît dans **Réglages → Clés MCP** sous le nom `OAuth: claude.ai`
+   (ou le nom que claude.ai s'est donné), révocable comme n'importe quelle
+   autre clé.
+
+---
+
 ## Questions fréquentes
 
 **Est-ce vraiment gratuit ?**
@@ -406,7 +467,15 @@ ce qui est normal en cours de configuration. Pour créer les 2 comptes,
 préférez "Add user → Create new user" avec un mot de passe défini
 directement et "Auto Confirm User" coché — ça n'envoie aucun e-mail.
 
+**Clé API simple ou OAuth (phase F) — lequel choisir ?**
+La clé API simple (Réglages → Clés MCP) suffit pour la plupart des clients
+MCP et est plus rapide à mettre en place. OAuth (phase F) n'est nécessaire
+que pour les clients qui l'exigent explicitement sans offrir d'alternative
+— claude.ai en fait partie. Les deux aboutissent au même résultat technique
+: un jeton stocké dans `api_keys`, révocable depuis la même page Réglages.
+
 ---
 
-Une fois les phases A à E terminées, le cabinet a une base de données, deux
-comptes, un service d'e-mail fiable, et une adresse en ligne.
+Une fois les phases A à E (et F si besoin) terminées, le cabinet a une base
+de données, deux comptes, un service d'e-mail fiable, et une adresse en
+ligne.

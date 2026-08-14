@@ -10,7 +10,21 @@ const PUBLIC_PATHS = ["/login", "/auth/callback", "/"];
 
 // The MCP endpoint has its own bearer-token auth (see src/lib/mcp/apiKeyAuth.ts)
 // and must never be redirected to /login — MCP clients don't have cookies.
-const BYPASS_PREFIXES = ["/api/mcp", "/_next", "/favicon.ico", "/manifest.webmanifest", "/icons", "/sw.js"];
+// The OAuth discovery/registration/token endpoints are likewise called
+// directly by a client's backend, never through a signed-in browser — only
+// /oauth/authorize and its /approve submit stay behind the normal login
+// redirect below, since a human has to grant consent there.
+const BYPASS_PREFIXES = [
+  "/api/mcp",
+  "/_next",
+  "/favicon.ico",
+  "/manifest.webmanifest",
+  "/icons",
+  "/sw.js",
+  "/.well-known",
+  "/oauth/register",
+  "/oauth/token",
+];
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -50,7 +64,10 @@ export async function proxy(request: NextRequest) {
 
   if (!user && !isPublic) {
     const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("next", pathname);
+    // Preserve the query string, not just the path — /oauth/authorize needs
+    // its client_id/redirect_uri/code_challenge/state to survive the round
+    // trip through login.
+    loginUrl.searchParams.set("next", pathname + request.nextUrl.search);
     return NextResponse.redirect(loginUrl);
   }
 
