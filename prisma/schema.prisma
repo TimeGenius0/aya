@@ -1,0 +1,207 @@
+// Prisma schema for the Aya Handous veterinary app.
+//
+// This mirrors the SQL executed by hand in the Supabase SQL Editor
+// (see the setup checklist) — Prisma is used here only as a typed
+// query layer, not for migrations. `auth.users` (Supabase Auth) is
+// not modeled here; `Staff.id` references it by uuid.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+/// Maps a Supabase auth.users row to an app profile. Exactly 2 rows expected
+/// (Aya + her assistant) — see the setup checklist for how these are created.
+model Staff {
+  id        String   @id @db.Uuid
+  fullName  String   @map("full_name")
+  role      String   @default("assistant") // 'owner' | 'assistant'
+  createdAt DateTime @default(now()) @map("created_at")
+
+  clientsCreated       Client[]       @relation("ClientCreatedBy")
+  consultationsCreated Consultation[] @relation("ConsultationCreatedBy")
+  notesAuthored        Note[]         @relation("NoteAuthor")
+  invoicesCreated      Invoice[]      @relation("InvoiceCreatedBy")
+  apiKeys              ApiKey[]
+
+  @@map("staff")
+}
+
+model Client {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fullName  String   @map("full_name")
+  phone     String?
+  email     String?
+  address   String?
+  notes     String?
+  createdBy String?  @map("created_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  createdByStaff Staff?         @relation("ClientCreatedBy", fields: [createdBy], references: [id])
+  animals        Animal[]
+  consultations  Consultation[]
+  invoices       Invoice[]
+
+  @@map("clients")
+}
+
+model Animal {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clientId        String   @map("client_id") @db.Uuid
+  name            String
+  species         String
+  breed           String?
+  sex             String? // 'M' | 'F' | 'inconnu'
+  birthdate       DateTime? @db.Date
+  approxAgeYears  Decimal? @map("approx_age_years") @db.Decimal
+  weightKg        Decimal? @map("weight_kg") @db.Decimal
+  notes           String?
+  attributes      Json     @default("{}")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @default(now()) @map("updated_at")
+
+  client        Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  consultations Consultation[]
+  notesEntries  Note[]
+  invoices      Invoice[]
+
+  @@index([clientId])
+  @@map("animals")
+}
+
+model Consultation {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clientId        String   @map("client_id") @db.Uuid
+  animalId        String   @map("animal_id") @db.Uuid
+  scheduledAt     DateTime @map("scheduled_at")
+  durationMinutes Int      @default(30) @map("duration_minutes")
+  reason          String?
+  status          String   @default("planifie") // planifie|confirme|termine|annule|absent
+  createdBy       String?  @map("created_by") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @default(now()) @map("updated_at")
+
+  client         Client    @relation(fields: [clientId], references: [id])
+  animal         Animal    @relation(fields: [animalId], references: [id])
+  createdByStaff Staff?    @relation("ConsultationCreatedBy", fields: [createdBy], references: [id])
+  notes          Note[]
+  invoices       Invoice[]
+
+  @@index([clientId])
+  @@index([animalId])
+  @@index([scheduledAt])
+  @@map("consultations")
+}
+
+model Note {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  animalId       String   @map("animal_id") @db.Uuid
+  consultationId String?  @map("consultation_id") @db.Uuid
+  authorId       String?  @map("author_id") @db.Uuid
+  freeText       String?  @map("free_text")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @map("updated_at")
+
+  animal       Animal         @relation(fields: [animalId], references: [id])
+  consultation Consultation?  @relation(fields: [consultationId], references: [id])
+  author       Staff?         @relation("NoteAuthor", fields: [authorId], references: [id])
+  lineItems    NoteLineItem[]
+  invoices     Invoice[]
+
+  @@index([animalId])
+  @@map("notes")
+}
+
+model NoteLineItem {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  noteId      String  @map("note_id") @db.Uuid
+  kind        String // 'traitement' | 'produit' | 'acte'
+  description String
+  quantity    Decimal @default(1) @db.Decimal
+  unitPrice   Decimal @default(0) @map("unit_price") @db.Decimal
+  sortOrder   Int     @default(0) @map("sort_order")
+
+  note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  @@index([noteId])
+  @@map("note_line_items")
+}
+
+model Invoice {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  invoiceNumber  String   @unique @map("invoice_number")
+  clientId       String   @map("client_id") @db.Uuid
+  animalId       String?  @map("animal_id") @db.Uuid
+  consultationId String?  @map("consultation_id") @db.Uuid
+  noteId         String?  @map("note_id") @db.Uuid
+  currency       String   @default("TND")
+  subtotal       Decimal  @default(0) @db.Decimal
+  taxRate        Decimal  @default(0) @map("tax_rate") @db.Decimal
+  taxAmount      Decimal  @default(0) @map("tax_amount") @db.Decimal
+  total          Decimal  @default(0) @db.Decimal
+  status         String   @default("brouillon") // brouillon|emise|payee|annulee
+  issuedAt       DateTime @default(now()) @map("issued_at")
+  pdfPath        String?  @map("pdf_path")
+  createdBy      String?  @map("created_by") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  client         Client             @relation(fields: [clientId], references: [id])
+  animal         Animal?            @relation(fields: [animalId], references: [id])
+  consultation   Consultation?      @relation(fields: [consultationId], references: [id])
+  note           Note?              @relation(fields: [noteId], references: [id])
+  createdByStaff Staff?             @relation("InvoiceCreatedBy", fields: [createdBy], references: [id])
+  lineItems      InvoiceLineItem[]
+
+  @@map("invoices")
+}
+
+model InvoiceLineItem {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  invoiceId   String  @map("invoice_id") @db.Uuid
+  description String
+  quantity    Decimal @default(1) @db.Decimal
+  unitPrice   Decimal @default(0) @map("unit_price") @db.Decimal
+  lineTotal   Decimal @default(0) @map("line_total") @db.Decimal
+  sortOrder   Int     @default(0) @map("sort_order")
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("invoice_line_items")
+}
+
+/// Singleton row (id always 1) holding the clinic's letterhead info, used on
+/// generated invoices. Edited from /settings.
+model ClinicSettings {
+  id              Int      @id @default(1)
+  name            String   @default("Dr. Aya Handous")
+  address         String?
+  phone           String?
+  email           String?
+  defaultTaxRate  Decimal  @default(0) @map("default_tax_rate") @db.Decimal
+  updatedAt       DateTime @default(now()) @map("updated_at")
+
+  @@map("clinic_settings")
+}
+
+/// MCP bearer-token auth. Never exposed to authenticated-role RLS policies —
+/// only readable via the Supabase service-role key from server-side code.
+model ApiKey {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  label       String?
+  keyHash     String    @map("key_hash")
+  staffId     String?   @map("staff_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at")
+  lastUsedAt  DateTime? @map("last_used_at")
+  revokedAt   DateTime? @map("revoked_at")
+
+  staff Staff? @relation(fields: [staffId], references: [id])
+
+  @@map("api_keys")
+}

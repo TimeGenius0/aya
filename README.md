@@ -1,36 +1,58 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Aya Handous — Cabinet vétérinaire
 
-## Getting Started
+Application de gestion pour un cabinet vétérinaire à deux utilisatrices :
+clients, animaux, notes de traitement, calendrier de consultations et
+facturation. Accessible sur mobile et web, installable comme une application
+(PWA), et exposée en MCP pour un assistant IA.
 
-First, run the development server:
+## Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- **Next.js** (App Router pour les pages, Pages Router pour `/api/mcp` —
+  requis pour la compatibilité avec le SDK MCP) + TypeScript + Tailwind CSS
+- **Supabase** — base de données Postgres, authentification (mot de passe +
+  lien magique), stockage de fichiers
+- **Resend** — envoi des e-mails d'authentification (via SMTP personnalisé
+  configuré dans Supabase, aucun code applicatif)
+- **Prisma** — accès typé à la base (le schéma canonique reste le SQL exécuté
+  à la main dans Supabase, voir le guide de mise en route)
+- **@react-pdf/renderer** — génération des factures PDF
+- **@modelcontextprotocol/sdk** — serveur MCP exposant les dossiers du
+  cabinet à un client IA
+- **FullCalendar** — vue calendrier des consultations
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Démarrage local
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Suivre le guide de mise en route (checklist des comptes GitHub, Supabase,
+   Resend, Vercel — remis séparément) pour créer un projet Supabase et
+   récupérer les clés.
+2. Copier `.env.local.example` vers `.env.local` et renseigner les valeurs.
+3. Installer les dépendances puis lancer le serveur de développement :
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+   ```bash
+   npm install
+   npx prisma generate
+   npm run dev
+   ```
 
-## Learn More
+4. Ouvrir [http://localhost:3000](http://localhost:3000).
 
-To learn more about Next.js, take a look at the following resources:
+## Commandes
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `npm run dev` — serveur de développement
+- `npm run build` — build de production (type-check inclus)
+- `npm start` — sert le build de production
+- `npm run lint` — ESLint
+- `npm run prisma:generate` — régénère le client Prisma après une
+  modification de `prisma/schema.prisma`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Déploiement
 
-## Deploy on Vercel
+Hébergé gratuitement sur Vercel (voir le guide de mise en route pour la
+checklist complète : variables d'environnement, redirection Supabase vers
+l'adresse `*.vercel.app`, etc.).
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## MCP
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Une fois l'app en ligne, générer une clé depuis **Réglages → Clés MCP**, puis
+configurer un client MCP compatible avec l'URL `https://<votre-app>.vercel.app/api/mcp`
+et un en-tête `Authorization: Bearer <clé>`.
